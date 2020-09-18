@@ -9,6 +9,7 @@ import com.bitmovin.api.sdk.model.DashManifestDefault;
 import com.bitmovin.api.sdk.model.DashManifestDefaultVersion;
 import com.bitmovin.api.sdk.model.Encoding;
 import com.bitmovin.api.sdk.model.EncodingOutput;
+import com.bitmovin.api.sdk.model.Thumbnail;
 import com.bitmovin.api.sdk.model.Fmp4Muxing;
 import com.bitmovin.api.sdk.model.H264VideoConfiguration;
 import com.bitmovin.api.sdk.model.HlsManifest;
@@ -21,6 +22,7 @@ import com.bitmovin.api.sdk.model.MuxingStream;
 import com.bitmovin.api.sdk.model.Output;
 import com.bitmovin.api.sdk.model.PresetConfiguration;
 import com.bitmovin.api.sdk.model.S3Output;
+import com.bitmovin.api.sdk.model.S3Input;
 import com.bitmovin.api.sdk.model.StartEncodingRequest;
 import com.bitmovin.api.sdk.model.Status;
 import com.bitmovin.api.sdk.model.Stream;
@@ -31,7 +33,14 @@ import com.bitmovin.api.sdk.model.Task;
 import common.ConfigProvider;
 import feign.Logger.Level;
 import feign.slf4j.Slf4jLogger;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
+import java.nio.charset.Charset;
 import java.nio.file.Paths;
+import java.time.Instant;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,10 +81,10 @@ public class DefaultManifests {
   private static ConfigProvider configProvider;
 
   public static void main(String[] args) throws Exception {
-    configProvider = new ConfigProvider(args);
+    //configProvider = new ConfigProvider(args);
     bitmovinApi =
         BitmovinApi.builder()
-            .withApiKey(configProvider.getBitmovinApiKey())
+            .withApiKey("")
             .withLogger(
                 new Slf4jLogger(), Level.BASIC) // set the logger and log level for the API client
             .build();
@@ -84,23 +93,39 @@ public class DefaultManifests {
         createEncoding(
             "Encoding with default manifests", "Encoding with HLS and DASH default manifests");
 
-    Input input = createHttpInput(configProvider.getHttpInputHost());
-    Output output =
-        createS3Output(
-            configProvider.getS3OutputBucketName(),
-            configProvider.getS3OutputAccessKey(),
-            configProvider.getS3OutputSecretKey());
+//    Input input = createHttpInput(configProvider.getHttpInputHost());
+//    Output output =
+//        createS3Output(
+//            configProvider.getS3OutputBucketName(),
+//            configProvider.getS3OutputAccessKey(),
+//            configProvider.getS3OutputSecretKey());
+    
+    S3Input input = bitmovinApi.encoding.inputs.s3.get("5f76fd83-6d16-4bab-8069-db6450686778");
+    
+    S3Output output =  bitmovinApi.encoding.outputs.s3.get("44f70a74-392f-4e1c-8557-697ef6922410");
+
+
+    String inputFilePath = "/Earth.mp4";
 
     // Add a template video stream to the encoding
-    H264VideoConfiguration h264Config = createH264VideoConfig();
-    Stream videoStream =
-        createStream(encoding, input, configProvider.getHttpInputFilePath(), h264Config);
-    createFmp4Muxing(encoding, output, "video", videoStream);
+    //H264VideoConfiguration h264Config = createH264VideoConfig();
+  final List<H264VideoConfiguration> videoConfigurations =
+  Arrays.asList(
+      createH264VideoConfig(1080, 4_800_000L),
+      createH264VideoConfig(720, 2_400_000L),
+      createH264VideoConfig(480, 1_200_000L));
+  
+  for (H264VideoConfiguration videoConfiguration : videoConfigurations) {
+
+	  	Stream videoStream =
+        createStream(encoding, input, inputFilePath, videoConfiguration);
+    	createFmp4Muxing(encoding, output, "video", videoStream);
+  }
 
     // Add audio stream to the encoding
     AacAudioConfiguration aacConfig = createAacAudioConfig();
     Stream audioStream =
-        createStream(encoding, input, configProvider.getHttpInputFilePath(), aacConfig);
+        createStream(encoding, input, inputFilePath, aacConfig);
     createFmp4Muxing(encoding, output, "audio", audioStream);
 
     executeEncoding(encoding);
@@ -125,12 +150,12 @@ public class DefaultManifests {
    *
    * @param host The hostname or IP address of the HTTP server e.g.: my-storage.biz
    */
-  private static HttpInput createHttpInput(String host) throws BitmovinException {
-    HttpInput input = new HttpInput();
-    input.setHost(host);
-
-    return bitmovinApi.encoding.inputs.http.create(input);
-  }
+//  private static HttpInput createHttpInput(String host) throws BitmovinException {
+//    HttpInput input = new HttpInput();
+//    input.setHost(host);
+//
+//    return bitmovinApi.encoding.inputs.http.create(input);
+//  }
 
   /**
    * Creates a resource representing an AWS S3 cloud storage bucket to which generated content will
@@ -155,16 +180,16 @@ public class DefaultManifests {
    * @param accessKey The access key of your S3 account
    * @param secretKey The secret key of your S3 account
    */
-  private static S3Output createS3Output(String bucketName, String accessKey, String secretKey)
-      throws BitmovinException {
-
-    S3Output s3Output = new S3Output();
-    s3Output.setBucketName(bucketName);
-    s3Output.setAccessKey(accessKey);
-    s3Output.setSecretKey(secretKey);
-
-    return bitmovinApi.encoding.outputs.s3.create(s3Output);
-  }
+//  private static S3Output createS3Output(String bucketName, String accessKey, String secretKey)
+//      throws BitmovinException {
+//
+//    S3Output s3Output = new S3Output();
+//    s3Output.setBucketName(bucketName);
+//    s3Output.setAccessKey(accessKey);
+//    s3Output.setSecretKey(secretKey);
+//
+//    return bitmovinApi.encoding.outputs.s3.create(s3Output);
+//  }
 
   /**
    * Creates an Encoding object. This is the base object to configure your encoding.
@@ -225,12 +250,20 @@ public class DefaultManifests {
    * <p>API endpoint:
    * https://bitmovin.com/docs/encoding/api-reference/sections/configurations#/Encoding/PostEncodingConfigurationsVideoH264
    */
-  private static H264VideoConfiguration createH264VideoConfig() throws BitmovinException {
-    H264VideoConfiguration config = new H264VideoConfiguration();
+  private static H264VideoConfiguration createH264VideoConfig(int height,long bitrate) throws BitmovinException {
+    
+	  H264VideoConfiguration config = new H264VideoConfiguration();
     config.setName("H.264 1080p 1.5 Mbit/s");
     config.setPresetConfiguration(PresetConfiguration.VOD_STANDARD);
-    config.setHeight(1080);
-    config.setBitrate(1_500_000L);
+    config.setHeight(height);
+    config.setBitrate(bitrate);
+    
+    
+//    final List<H264VideoConfiguration> videoConfigurations =
+//            Arrays.asList(
+//                createH264VideoConfig(1080, 4_800_000L),
+//                createH264VideoConfig(720, 2_400_000L),
+//                createH264VideoConfig(480, 1_200_000L));
 
     return bitmovinApi.encoding.configurations.video.h264.create(config);
   }
@@ -265,12 +298,18 @@ public class DefaultManifests {
       Encoding encoding, Output output, String outputPath, Stream stream) throws BitmovinException {
     MuxingStream muxingStream = new MuxingStream();
     muxingStream.setStreamId(stream.getId());
+    
+    
 
     Fmp4Muxing muxing = new Fmp4Muxing();
     muxing.addOutputsItem(buildEncodingOutput(output, outputPath));
     muxing.addStreamsItem(muxingStream);
     muxing.setSegmentLength(4.0);
-
+    
+    Thumbnail tb = new Thumbnail();
+    
+    
+    
     return bitmovinApi.encoding.encodings.muxings.fmp4.create(encoding.getId(), muxing);
   }
 
@@ -303,8 +342,16 @@ public class DefaultManifests {
    * @return The absolute path
    */
   public static String buildAbsolutePath(String relativePath) {
-    String className = DefaultManifests.class.getSimpleName();
-    return Paths.get(configProvider.getS3OutputBasePath(), className, relativePath).toString();
+    //String className = DefaultManifests.class.getSimpleName();
+	//long now = Instant.now().toEpochMilli();
+	
+	//byte[] array = new byte[7]; // length is bounded by 7
+    //new Random().nextBytes(array);
+   // String generatedString = new String(array, Charset.forName("UTF-8"));
+    
+    //String videoIdString = new String(Long.toString(now));
+  
+    return Paths.get("outputs", "earthvideo" , relativePath).toString();
   }
 
   /**
@@ -323,7 +370,10 @@ public class DefaultManifests {
    */
   private static void executeEncoding(Encoding encoding)
       throws InterruptedException, BitmovinException {
-    bitmovinApi.encoding.encodings.start(encoding.getId(), new StartEncodingRequest());
+    
+	  
+	  bitmovinApi.encoding.encodings.start(encoding.getId(), new StartEncodingRequest());
+	  //Thumbnail tb = Thumbnail("");
 
     Task task;
     do {
